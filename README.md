@@ -4,7 +4,7 @@ NAME
        ncat-jobq - Serve queue contents to network clients using ncat
 
 SYNOPSIS
-       ncat-jobq [OPTION]...
+       ncat-jobq -q <filename> [OPTION]...
 
 DESCRIPTION
        Pop and send the first line of a file to network clients.
@@ -23,7 +23,7 @@ OPTIONS
               Local ip address to bind to, defaults to 0.0.0.0
 
        -p, --port <port>
-              Local tcp port number
+              Local tcp port number, defaults to 3354
 
        -o, --options <string>
                Additional ncat options
