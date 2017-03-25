@@ -1,0 +1,138 @@
+#!/bin/bash
+#    ncat-jobq, serve queue contents to network clients using ncat
+#    Copyright (C) 2017 ALSENET.COM  http://www.alsenet.com
+#
+#    Author: Rurik Bugdanov <rurik.bugdanov@alsenet.com>
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as
+#    published by the Free Software Foundation, either version 3 of the
+#    License, or (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+usage() {
+cat << EOF
+NAME
+       $(basename $0) - Serve queue contents to network clients using ncat
+
+SYNOPSIS
+       $(basename $0) [OPTION]...
+
+DESCRIPTION
+       Pop and send the first line of a file to network clients.
+       When the file is empty, send an empty string.
+       One client at a time. You can specify the local server address and port.
+       Append one line per incoming transaction to \${QUEUE}.log
+
+OPTIONS
+       -h, --help
+              this text
+
+       -q, --queue
+              The file containing the queue (WILL BE EMPTIED)
+
+       -l, --local <addr>
+              Local ip address to bind to, defaults to 0.0.0.0
+
+       -p, --port <port>
+              Local tcp port number, defaults to 3345
+
+       -o, --options <string>
+               Additional ncat options
+
+EOF
+
+}
+   # parse command line options
+  if ! options=$(getopt -o hq:l:p:o:d: -l help,queue:,listen:,port:,options:,delay: -- "$@")
+  then
+      # something went wrong, getopt will put out an error message for us
+      exit 1
+  fi
+
+  eval set -- "$options"
+
+  while [ $# -gt 0 ] ; do
+      case $1 in
+      -h|--help) usage $1 ;;
+      -q|--queue) QUEUE=$2 ; shift ;;
+      -l|--listen) LOCAL_ADDR=$2 ; shift ;;
+      -p|--port) LOCAL_PORT=$2 ; shift ;;
+      -o|--options) NCAT_OPTIONS=$2 ; shift ;;
+      -d|--delay) RESTART_DELAY=$2 ; shift ;;
+      (--) shift; break;;
+      (-*) echo "$(basename $0): error - unrecognized option $1" 1>&2; exit 1;;
+      (*) break;;
+      esac
+      shift
+  done
+
+# check for dependencies
+for CMD in ncat realpath ; do
+  which $CMD > /dev/null ||  {
+    echo error: you must install \"$CMD\" first
+    exit 1
+  }
+done
+
+if [ -z "$QUEUE" ] ; then
+  echo error: QUEUE not set
+  exit 1
+fi
+
+QUEUE=$(realpath $QUEUE)
+echo "$(date +%Y-%m-%d@%T) serving $QUEUE" >> ${QUEUE}.log
+
+# is the script run by ncat ?
+if [ -z "$NCAT_REMOTE_ADDR" ] ; then
+
+   # no ? then run ncat
+   export LOCAL_ADDR LOCAL_PORT QUEUE
+
+   while true; do
+     # start server, one client at a time TODO: check if it's really required
+     echo "$(date +%Y-%m-%d@%T) listening to ${LOCAL_ADDR:=0.0.0.0} ${LOCAL_PORT:=3354}" >> ${QUEUE}.log
+     ncat -m 1 -k --send-only -v -e $0 \
+       -l $LOCAL_ADDR $LOCAL_PORT \
+       $NCAT_OPTIONS
+
+     EXIT_CODE=$?
+     echo "$(date +%Y-%m-%d@%T) exit $EXIT_CODE" >> ${QUEUE}.log
+
+     # exit loop on signal received
+     if [ $EXIT_CODE -gt 128 ] ; then
+       break
+     fi
+
+     sleep ${RESTART_DELAY:=2}
+   done
+
+else
+  # the script has been launched by ncat on client connection
+  # so handle client connection
+
+  # exit on error
+  set -e
+
+  # pop the first line of QUEUE
+  LINE=$(sed -e  '1 w /dev/stdout' -e '1d' -i $QUEUE)
+
+  # send LINE to client if not empty
+  if [ -n "$LINE" ] ; then
+    # log
+    echo "$(date +%Y-%m-%d@%T) sending $NCAT_REMOTE_ADDR $LINE" >> ${QUEUE}.log
+    # send
+    echo $LINE
+  fi
+
+  # close connection
+  exit 0
+
+fi
