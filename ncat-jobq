@@ -49,6 +49,8 @@ OPTIONS
 
 EOF
 
+exit 1
+
 }
    # parse command line options
   if ! options=$(getopt -o hq:l:p:o:d: -l help,queue:,listen:,port:,options:,delay: -- "$@")
@@ -83,8 +85,8 @@ for CMD in ncat realpath ; do
 done
 
 if [ -z "$QUEUE" ] ; then
-  echo error: QUEUE not set
-  exit 1
+  echo error: QUEUE is not set
+  usage
 fi
 
 QUEUE=$(realpath $QUEUE)
