@@ -12,6 +12,7 @@ DESCRIPTION
        One client at a time. You can specify the local server address and port.
        Append one line per incoming transaction to ${QUEUE}.log
 
+OPTIONS
        -h, --help
               this text
 
